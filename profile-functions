@@ -1,0 +1,49 @@
+function set_f()
+{
+   cat <<EOF > ~/settings
+   MY_FOUNDATION="$1"
+EOF
+
+  chmod +x ~/settings
+
+  . ~/settings
+}
+
+
+function get_f()
+{
+   cat ~/settings
+}
+
+function set_env()
+{
+   if [[ -e ~/settings ]]
+   then 
+     . ~/settings
+   fi
+   if [ -z "$MY_FOUNDATION" ]
+   then
+      read -p "Foundation: " foundation
+      set_f $foundation
+      . ~/settings
+   fi
+}
+
+function om_ssh
+{
+  set_env
+  foundation=$MY_FOUNDATION
+   
+  om_ip=$(bosh int $foundation.yml --path <om ip param>)
+  om_pwd=....
+
+  sshpass -p$om_pwd ssh -o StrickHostKeyChecking=no ubuntu@om_ip
+}
+
+
+function pas_creds()
+{
+   set_env
+   foundation=$MY_FOUNDATION
+}
+
