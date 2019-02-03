@@ -1,1 +1,66 @@
-Unable to initialize device PRN
+#!/bin/bash
+
+if [[ -z $1 ]] || [[ -z $2 ]]
+then
+  echo
+  echo "Usage: $0 [in yaml file] [out yaml file]]
+  exit
+fi
+
+#make copy of the input file as output fi;e
+# if there is nothing to process inout = output
+# if there are any !include tags process them on the output files.
+
+
+temp_dir=$(maketemp -d)
+
+cp $1 $2
+
+input_file=$2
+
+include_line=$(grep -n -m 1 -e '!include:.*' $input_file)
+
+while [[ -n $include_line ]]
+do
+   echo "Processing  $include_line .."
+   line=$(echo $include_line | cut -d: -f1)
+   in_file=$(echo $include_line | cut -d: -f3)
+   in_file_section=$(echo $include_line | cut -d: -f4)
+
+   if [[ -n $in_file_section ]]
+   then
+      echo "In file=$in_file"
+      cp -f "$in_file" "$temp_dir/source_file"
+      sed -i -e 's/{{/((/g' -e 's/}}/))/g'  $temp_dir/source_file
+      (bosh int $temp_dir/source_file --path $in_file_section)>$temp_dir/bint.yml
+      in_file=$temp_dir/bint.yml
+   fi
+   #insert the content if $in_file @ $line in file $input_file
+   sed -i -e "$line r $in_file" $input_file
+
+   #delete the line @ $line which would be a line with anchor !include
+   sed -i -e "$line d" $input_file
+
+   #extract the test that is inform of !include:.. if any 
+   inc_txt="${include_line%%!*}" # this shoudl give all the teext before !include: including the line number
+
+   inc_txt=`echo "$inc_txt" | cut -d: -f2`  # take off the line number
+
+  if [[ -n $inc_txt ]]
+  then
+    #insert the text that was before !include
+    sed -i -e "${line}s/^/$inc_txt/" $input_file
+    #append eqaual number of spaces to in the inserted line
+    start_line=$((line+1))
+    no_of_lines=$(wc -l<$in_file)
+    end_line=$((start_line+no_of_lines-2))
+    no_spaces=${#inc_txt}
+    append=""
+    for (( i=0; i<$no_space;i++ ))
+    do
+       append="${append}"
+    done    
+    sed -i -e "$start_line,${end_line}s/^/${append}/" $input_file
+  fi
+  include_line=$(grep -n -m 1 -e '!include:.*' $input_file)
+ done
