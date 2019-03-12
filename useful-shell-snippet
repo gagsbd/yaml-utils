@@ -1,0 +1,6 @@
+#encrypt file using openssl
+openssl aes-256-cbc -a -salt -in <inputfile> -out <output file>
+#descrypt file
+openssl aes-256-cbc -d -a -in <inputfile> -out <output file>
+
+#if on windows use winpty to run openssl winpty openssl ......
