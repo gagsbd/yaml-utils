@@ -7,3 +7,23 @@ openssl aes-256-cbc -d -a -in <inputfile> -out <output file>
 
 #adding date
 exp_date=$(date -d '1 day' +%Y-%m-%dT%H:%M:%SZ)
+
+#function to parse arguments
+function get-args()
+{
+    key=$1
+    map=${@:2}
+    value=$(echo $map | sed -e "s/.*--${1}=\([^ ]*\).*/\1/" -e 's/:SP:/ /g'  )
+    #value=$(echo $map | sed -e "s/.*--${1}=\([^--]*\).*/\1/" -e 's/:SP:/ /g'  )
+    #value=$(echo $map | sed -e "s/\(*\)\(--${1}=[^ ]*\)\(.*\)/\2/"  )
+
+    #compare
+    if [[ ${#value} == ${#map} ]] || [[ "$key" == "$value" ]] #did not find the key
+    then
+       value=""
+    fi
+    echo "$value"
+
+}
+#usage of get-args
+repo_folder="$(get-args root-folder $@)"
