@@ -27,3 +27,5 @@ function get-args()
 }
 #usage of get-args
 repo_folder="$(get-args root-folder $@)"
+
+ earliest_expiry=$( echo "$expiring_cert" |  tools/jq -r '.certificates | min_by(.valid_until) | .valid_until | (fromdate-now)/86400 | floor')
