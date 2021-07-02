@@ -29,3 +29,9 @@ function get-args()
 repo_folder="$(get-args root-folder $@)"
 
  earliest_expiry=$( echo "$expiring_cert" |  tools/jq -r '.certificates | min_by(.valid_until) | .valid_until | (fromdate-now)/86400 | floor')
+ 
+ cat <<EOF
+       <table style=\"border:1px solid black\"><tr><th>CA</th><th>Configurable?</th><th>Expiring On</th><th>Expiring in (days)</th><th>Used By</th><th>Location</th><th>Path</th></tr>
+       $(echo "$1" | tools/jq -r '.[] | "<tr><td>\(.is_ca)</td><td>\(.configurable)</td><td>\(.valid_until)</td><td>\(.valid_until | (fromdate-now)/86400 | floor) </td><td>\(.product_guid)</td><td>\(.location)</td><td>\(if .variable_path != null then .variable_path else "" end )</td></tr>"')
+       </table
+
