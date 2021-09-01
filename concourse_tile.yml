@@ -1,1 +1,657 @@
+---
+# The high-level description of your tile.
+# Replace these properties with real values.
+#
+name: concourse # By convention lowercase with dashes
+icon_file: resources/cc.PNG
+label: concourse
+description: Concourse cluster deployment
+# metadata_version: 1.8                 # Optional, defaults to 1.8
+
+# Global defaults (all optional)
+#
+# org: test-org                         # Name of org to create for your apps
+# space: test-space                     # Name of space to create for your apps
+apply_open_security_group: false       # Apply open security group, default: false
+standalone: true                     # Suppress default CF properties in property_blueprints metadata, default: false
+# Specify the packages to be included in your tile.
+# The format of the section to include depends on the type
+# of package you are describing. For fragments of each type
+# that you can copy & paste, see:
+#
+# http://docs.pivotal.io/tiledev/tile-generator.html
+#
+forms:
+- name: database
+  label: Database
+  properties:
+  - name: uaa_db_password
+    type: secret
+    label: UAA db password
+    configurable: false
+- name: web_form
+  label: Web
+  properties:
+  - name: external_url
+    label: "Concourse portal external URL"
+    type: "http_url"
+    description: "Concourse web portal host name"
+  - name: token_signing_key
+    label: token signing key
+    type: rsa_cert_credentials
+    configurable: true
+  - name: network_extension
+    type: string
+    label: Web vm network extension
+    configurable: true
+    optional: false
+  - name: db_password
+    type: secret
+    label: DB password
+    configurable: false
+  - name: tsa_host_key
+    label: tsa host key
+    type: rsa_pkey_credentials
+    configurable: false
+  - name: worker_key
+    label: worker host key
+    type: rsa_pkey_credentials
+    configurable: false
+  - name: atc_tls
+    label: Atc tls
+    type: rsa_cert_credentials
+    configurable: false
+  - name: admin_password
+    type: simple_credentials
+    label: Local Admin User  password
+    configurable: false
+    default:
+      identity: admin
+  - name: uaa_admin_password
+    type: simple_credentials
+    label: Uaa Admin password
+    configurable: false
+    default:
+      identity: admin
+  - name: uaa_admin_secret
+    type: secret
+    label: Uaa Admin secret
+    configurable: false
+  - name: uaa_login_secret
+    type: secret
+    label: Uaa login secret
+    configurable: false
+  - name: credhub_db_password
+    label: Credhub db password
+    type: simple_credentials
+    configurable: false
+    default:
+      identity: credhub
+  - name: credhub_encryption_password
+    label: cred hub encryption key
+    type: secret
+    configurable: false
+  - name: concourse_to_credhub_client_secret
+    label: concourse to credhub client secret
+    type: secret
+    configurable: false
+  - name: credhub_admin_secret
+    label: credhub admin  secret
+    type: secret
+    configurable: false
+
+
+- name: Logging #2
+  label: Logging configuration
+  properties:
+  - name: build
+    label: "Enable Build Audit Logging"
+    type: boolean
+    configurable: true
+  - name: job
+    label: "Enable Job Audit Logging"
+    type: boolean
+    configurable: true
+  - name: pipeline
+    label: "Enable Pipeline Audit Logging"
+    type: boolean
+    configurable: true
+  - name: resource
+    label: "Enable Resource Audit Logging"
+    type: boolean
+    configurable: true
+  - name: team
+    label: "Enable Team Audit Logging"
+    type: boolean
+    configurable: true
+  - name: system
+    label: "Enable System Audit Logging"
+    type: boolean
+    configurable: true
+  - name: volume
+    label: "Enable volume Audit Logging"
+    type: boolean
+    configurable: true
+  - name: worker
+    label: "Enable Worker Audit Logging"
+    type: boolean
+    configurable: true
+  - name: container
+    label: "Enable Container Audit Logging"
+    type: boolean
+    configurable: true
+
+
+packages:
+- name: bpm
+  type: bosh-release
+  path: resources/bpm-release-1.1.13.tgz
+- name: uaa
+  type: bosh-release
+  path: resources/uaa-release-75.6.0.tgz
+- name: concourse
+  path: resources/concourse-bosh-release-6.7.6.tgz
+  type: bosh-release
+- name: postgres
+  type: bosh-release
+  path: resources/postgres-release-43.tgz
+- name: credhub
+  type: bosh-release
+  path: resources/credhub-2.9.1.tgz
+  jobs:
+  - name: db
+    instance: 1
+    dynamic_ip: 1
+    type: standalone
+    memory: 512
+    ephemeral_disk: 4096
+    persistent_disk: 4096
+    cpu: 2
+    templates:
+    - name: postgres
+      release: postgres
+    properties:
+      databases:
+        port: 5432
+        databases:
+        - name: atc
+        - name: uaa
+        - name: credhub
+        roles:
+        - name: concourse
+          password: ((.properties.db_password.value))
+        - name: uaa
+          password: uaadbpassword
+        - name: credhub
+          password: ((.properties.credhub_db_password.password))
+
+  - name: web
+    instance: 1
+    dynamic_ip: 0
+    static_ip: 1
+    type: standalone
+    templates:
+    - name: web
+      release: concourse
+    - name: bpm
+      release: bpm
+    - name: uaa
+      release: uaa
+    - name: credhub
+      release: credhub
+    properties:
+      vm_extensions:
+      - ((.properties.network_extension.value))
+      main_team:
+        auth:
+          local:
+            users: [ admin ]
+      add_local_users: [ 'admin:((.properties.admin_password.password))' ]
+      token_signing_key:
+        private_key: ((.properties.token_signing_key.private_key_pem))
+        public_key: ((.properties.token_signing_key.public_key_pem))
+      external_url: ((.properties.external_url.value))
+      postgresql:
+        database: &db_name atc
+        role: &db_role
+          name: concourse
+          password: ((.properties.db_password.value))
+
+      worker_gateway:
+        host_key:
+          public_key: ((.properties.tsa_host_key.public_key_openssh))
+          private_key: ((.properties.tsa_host_key.private_key_pem))
+          public_key_fingerprint: ((.properties.tsa_host_key.public_key_fingerprint))
+
+        authorized_keys: |
+          ((.properties.worker_key.public_key_openssh))
+      tls:
+        bind_port: 443
+        cert: &atc_tls
+          certificate: ((.properties.atc_tls.cert_pem))
+          private_key: ((.properties.atc_tls.private_key_pem))
+      uaa:
+        url: &uaa-url "((.properties.external_url.value)):8443"
+        port: 8181
+        scim:
+          users:
+          - name: admin
+            password: ((.properties.uaa_admin_password.password))
+            groups:
+            - scim.write
+            - scim.read
+            - bosh.admin
+            - credhub.read
+            - credhub.write
+        admin: {client_secret: ((.properties.uaa_admin_secret.value))}
+        login: {client_secret: ((.properties.uaa_login_secret.value))}
+        zones: {internal: {hostnames: []}}
+        sslCertificate: ((.properties.atc_tls.cert_pem))
+        sslPrivateKey: ((.properties.atc_tls.private_key_pem))
+        clients:
+          concourse_to_credhub_client:
+            access-token-validity: 1200
+            authorities: credhub.read,credhub.write
+            authorized-grant-types: client_credentials
+            id: concourse_to_credhub_client
+            override: true
+            refresh-token-validity: 3600
+            scope: ""
+            secret: ((.properties.concourse_to_credhub_client_secret.value))
+          credhub_admin:
+            access-token-validity: 3600
+            authorities: credhub.read,credhub.write
+            authorized-grant-types: client_credentials
+            id: credhub_admin
+            override: true
+            refresh-token-validity: 3600
+            scope: ""
+            secret: ((.properties.credhub_admin_secret.value))
+
+        jwt:
+          revocable: true
+          policy:
+            active_key_id: key-1
+            keys:
+              key-1:
+                signingKey: ((.properties.atc_tls.private_key_pem))
+      uaadb:
+        tls: disabled
+        port: 5432
+        db_scheme: postgresql
+        databases:
+        - tag: uaa
+          name: &uaa_db uaa
+        roles:
+        - tag: admin
+          name: *uaa_db
+          password: &uaa_db_passwd uaadbpassword
+      encryption:
+        active_key_label: key-1
+        encryption_keys:
+        - label: key-1
+          passphrase: uaa_encryption_key
+      login:
+        saml:
+          serviceProviderCertificate: ((.properties.atc_tls.cert_pem))
+          serviceProviderKey: ((.properties.atc_tls.private_key_pem))
+          serviceProviderKeyPassword: ""
+      audit:
+        build: ((.properties.build.value))
+        container: ((.properties.container.value))
+        job: ((.properties.job.value))
+        pipeline: ((.properties.pipeline.value))
+        resource: ((.properties.resource.value))
+        system: ((.properties.system.value))
+        team: ((.properties.team.value))
+        volume: ((.properties.volume.value))
+        worker: ((.properties.worker.value))
+
+        #cred hub
+      credhub:
+        url: ((.properties.external_url.value)):8844
+        port: 8844
+        tls:
+          private_key: ((.properties.atc_tls.private_key_pem))
+          certificate: ((.properties.atc_tls.cert_pem))
+          ca_cert: (($ops_manager.ca_certificate))
+          client_cert: ((.properties.atc_tls.cert_pem))
+          insecure_skip_verify: false
+        client_id: concourse_to_credhub_client
+        client_secret: ((.properties.concourse_to_credhub_client_secret.value))
+        path_prefix: /concourse
+        authentication:
+          uaa:
+            enabled: true
+            url: "((.properties.external_url.value)):8443"
+            ca_certs: [(($ops_manager.ca_certificate))]
+        authorization:
+          acls:
+            enabled: false
+        data_storage:
+          type: postgres
+          database: credhub
+          username: ((.properties.credhub_db_password.identity))
+          password: ((.properties.credhub_db_password.password))
+          require_tls: false
+        log_level: info
+        encryption:
+          providers:
+          - name: internal-provider
+            type: internal
+          keys:
+          - provider_name: internal-provider
+            key_properties:
+              encryption_password: ((.properties.credhub_encryption_password.value))
+            active: true
+
+
+  - name: worker
+    type: standalone
+    instances: 1
+
+    templates:
+    - name: worker
+      release: concourse
+    properties:
+      drain_timeout: 10m
+      worker_gateway:
+        worker_key:
+          private_key: ((.properties.worker_key.private_key_pem))
+          public_key: ((.properties.worker_key.public_key_openssh))
+          public_key_fingerprint: ((.properties.worker_key.public_key_fingerprint))
+
+
+#  - name: workers_form
+#  label: Workers configuration
+#  properties:
+#  - name: worker_host_key
+#    label: TSA host key
+#    configurable: false
+#    type: rsa_pkey_credentials
+
+
+#- name: web #0
+#  label: Web configuration
+#  properties:
+#  - name: external_url
+#    label: "Concourse portal external URL"
+#    type: "http_url"
+#    description: "Concourse web portal host name"
+#  - name: db_password
+#    label: Dn password
+#    type: secret
+#    configurable: false
+#  - name: atc_tls
+#    label: TLS Certificate
+#    type: rsa_cert_credentials
+#    configurable: false
+#    default:
+#      domains:
+#      - "((.properties.external_url.value))"
+#- name: proxy_form #1
+#  label: Proxy configuration
+#  properties:
+#  - name: http_proxy
+#    label: "Http proxy"
+#    type: "string"
+#    optional: true
+#    description: "http_proxy setting on the vms"
+#  - name: https_proxy
+#    label: "Https proxy"
+#    type: "string"
+#    description: "https_proxy setting on the vms"
+#    optional: true
+#  - name: no_proxy
+#    label: "By pass proxy"
+#    type: "string"
+#    description: "no_proxy setting on the vms"
+#    optional: true
+#- name: Logging #2
+#  label: Logging configuration
+#  properties:
+#  - name: audit_logs
+#    label: "Enable Audit Logging"
+#    type: multi_select_options
+#    configurable: true
+#    optional: true
+#    options:
+#    - name: build_log
+#      label: "Enable Build Audit Logging"
+#    - name: job_log
+#      label: "Enable Job Audit Logging"
+#    - name: pipeline_log
+#      label: "Enable Pipeline Audit Logging"
+#    - name: resource_log
+#      label: "Enable Resource Audit Logging"
+#    - name: team_log
+#      label: "Enable Team Audit Logging"
+#    - name: system_log
+#      label: "Enable System Audit Logging"
+#    - name: volume_log
+#      label: "Enable volume Audit Logging"
+#    - name: worker_log
+#      label: "Enable Worker Audit Logging"
+#    - name: container_log
+#      label: "Enable Container Audit Logging"
+#- name: authn_authz #3
+#  label: "Authentication and Authorization"
+#  properties:
+#  - name: auth_uaa
+#    type: selector
+#    label: UAA Settings
+#    description: "Internal UAA authnetications"
+#    configurable: true
+#    default: uaa_on
+#    option_templates:
+#    - name: uaa_on
+#      label: Enabled
+#      select_value: uaa_on
+#    - name: uaa_off
+#      label: Disabled
+#      select_value: uaa_off
+#  - name: uaa_admin
+#    type: secret
+#    label: UAA admin secret
+#    configurable: false
+#  - name: uaa_login
+#    type: secret
+#    label: UAA login secret
+#    configurable: false
+#  - name: uaa_admin_password
+#    type: secret
+#    label: UAA admin password
+#    configurable: false
+#  - name: uaa_jwt
+#    label: jwt token signing key
+#    type: rsa_pkey_credentials
+#    configurable: false
+#  - name: uaa_db_password
+#    type: secret
+#    label: UAA db password
+#    configurable: false
+#  - name: uaa_encryption_key
+#    type: secret
+#    label: UAA encryption password
+#    configurable: false
+#
+#
+#  - name: auth_ldap
+#    type: selector
+#    label: LDAP settings
+#    configurable: true
+#    default: ldap_off
+#    description: "LDAP Authentication settings"
+#    option_templates:
+#    - name: ldap_on
+#      select_value: ldap_on
+#      label: enabled
+#      property_blueprints:
+#      - name: ldap_host
+#        type: domain
+#        label: LDAP Host
+#        configurable: true
+#      - name: ldap_creds
+#        type: simple_credentials
+#        label: Bind account and password
+#        configurable: true
+#    - name: ldap_off
+#      select_value: ldap_off
+#      label: Disabled
+#
+#- name: tsa_form #4
+#  label: TSA configuration
+#  properties:
+#  - name: token_signing_key
+#    label: Token signing key
+#    type: rsa_pkey_credentials
+#    configurable: false
+#  - name: tsa_host_key
+#    label: TSA host key
+#    configurable: false
+#    type: rsa_pkey_credentials
+#
+#
+#- name: workers_form
+#  label: Workers configuration
+#  properties:
+#  - name: worker_host_key
+#    label: TSA host key
+#    configurable: false
+#    type: rsa_pkey_credentials
+#packages:
+#- name: bpm
+#  type: bosh-release
+#  path: resources/bpm-release-1.1.13.tgz
+#- name: uaa
+#  type: bosh-release
+#  path: resources/uaa-release-75.6.0.tgz
+#- name: concourse
+#  path: resources/concourse-bosh-release-6.7.6.tgz
+#  type: bosh-release
+#- name: postgres
+#  type: bosh-release
+#  path: resources/postgres-release-43.tgz
+#
+#  jobs:
+#  - name: web
+#    instance: 1
+#    dynamic_ip: 1
+#    type: standalone
+#    consumes:
+#      postgres:
+#        from: db
+#    properties:
+#      token_signing_key:
+#        private_key: ((.properties.token_signing_key.private_key_pem))
+#        public_key: ((.properties.token_signing_key.public_key_pem))
+#      external_url: ((.properties.external_url.value))
+#      postgresql:
+#        database: &db_name atc
+#        role: &db_role
+#          name: concourse
+#          password: ((.properties.db_password.value))
+#
+#      worker_gateway:
+#        host_key:
+#          public_key: ((.properties.tsa_host_key.public_key_pem))
+#          private_key: ((.properties.tsa_host_key.private_key_pem))
+#          public_key_fingerprint: ((.properties.tsa_host_key.public_key_fingerprint))
+#
+#        authorized_keys: |
+#          ((.properties.worker_host_key.public_key_pem))
+#      tls:
+#        bind_port: 443
+#        cert:
+#          certificate: ((.properties.atc_tls.cert_pem))
+#          private_key: ((.properties.atc_tls.private_key_pem))
+#      uaa:
+#        url: ((.properties.external_url.value)):8443
+#        port: 8181
+#        scim:
+#          users:
+#          - name: admin
+#            password: ((.properties.uaa_admin_password.value))
+#            groups:
+#            - scim.write
+#            - scim.read
+#            - bosh.admin
+#            - credhub.read
+#            - credhub.write
+#        admin: {client_secret: ((.properties.uaa_admin.value))}
+#        login: {client_secret: ((.properties.uaa_login.value))}
+#        zones: {internal: {hostnames: []}}
+#        sslCertificate: ((.properties.atc_tls.cert_pem))
+#        sslPrivateKey: ((.properties.atc_tls.private_key_pem))
+#        jwt:
+#          revocable: true
+#          policy:
+#            active_key_id: key-1
+#            keys:
+#              key-1:
+#                signingKey: ((.properties.uaa_jwt.private_key_pem))
+#      uaadb:
+#        port: 5432
+#        db_scheme: postgresql
+#        tls: disabled
+#        databases:
+#        - tag: uaa
+#          name: uaa
+#        roles:
+#        - tag: admin
+#          name: uaa
+#          password: &uaa_db_passwd ((.properties.uaa_db_password.value))
+#      encryption:
+#        active_key_label: key-1
+#        encryption_keys:
+#        - label: key-1
+#          passphrase: ((.properties.uaa_encryption_key.value))
+#      login:
+#        saml:
+#          serviceProviderCertificate: ((.properties.atc_tls.cert_pem))
+#          serviceProviderKey: ((.properties.atc_tls.private_key_pem))
+#          serviceProviderKeyPassword: ""
+#    templates:
+#    - name: web
+#      release: concourse
+#    - name: bpm
+#      release: bpm
+#    - name: uaa
+#      release: uaa
+#  - name: worker
+#    instance: 1
+#    dynamic_ip: 1
+#    type: standalone
+#    templates:
+#    - name: worker
+#      release: concourse
+#    properties:
+#      drain_timeout: 10m
+#      worker_gateway:
+#        worker_key:
+#          public_key: ((.properties.worker_host_key.public_key_pem))
+#          private_key: ((.properties.worker_host_key.private_key_pem))
+#
+#
+#  - name: db
+#    instance: 1
+#    dynamic_ip: 1
+#    type: standalone
+#    memory: 512
+#    ephemeral_disk: 4096
+#    persistent_disk: 4096
+#    cpu: 2
+#    templates:
+#    - name: postgres
+#      release: postgres
+#      properties:
+#        databases:
+#          port: 5432
+#          databases:
+#          - name: atc
+#          - name: uaa
+#          roles:
+#          - *db_role
+#          - name: uaa
+#            password: ((.properties.uaa_db_password.value))
 
