@@ -22,16 +22,34 @@ standalone: true                     # Suppress default CF properties in propert
 # http://docs.pivotal.io/tiledev/tile-generator.html
 #
 forms:
-- name: database
-  label: Database
-  properties:
-  - name: uaa_db_password
-    type: secret
-    label: UAA db password
-    configurable: false
 - name: web_form
   label: Web
   properties:
+  - name: static_ip
+    type: selector
+    label: Static IP?
+    configurable: true
+    default: "use_static"
+    description: "Static Ip for web vm"
+    option_templates:
+    - name: static_ip_yes
+      select_value: use_static
+      label: Use
+      named_manifests:
+        - name: ips
+          manifest: ((.properties.static_ips.value))
+
+      property_blueprints:
+      - name: static_ips
+        type: string_list
+        label: Web static ip
+        configurable: true
+    - name: static_ip_no
+      select_value: do_not_use_static
+      label: Do not use
+      named_manifests:
+        - name: ips
+          manifest: []
   - name: external_url
     label: "Concourse portal external URL"
     type: "http_url"
@@ -99,6 +117,195 @@ forms:
     label: credhub admin  secret
     type: secret
     configurable: false
+- name: authn_authz #3
+  label: "Authentication and Authorization"
+  properties:
+  - name: auth_uaa
+    type: selector
+    label: Local UAA Login
+    description: "Internal UAA authnetications"
+    configurable: true
+    default: uaa_on
+    option_templates:
+    - name: uaa_on
+      label: Enabled
+      select_value: uaa_on
+    - name: uaa_off
+      label: Disabled
+      select_value: uaa_off
+
+
+  - name: auth_selector
+    type: selector
+    label: LDAP
+    configurable: true
+    default: ldap_off
+    description: "LDAP Authentication settings"
+    option_templates:
+    - name: ldap_on
+      select_value: ldap_on
+      label: enabled
+      named_manifests:
+      - name: ldap_settings
+        manifest: |
+          host: "((.properties.auth_selector.ldap_on.ldap_host.value))"
+          bind_dn: "((.properties.auth_selector.ldap_on.bind_dn.value))"
+          bind_pw: "((.properties.auth_selector.ldap_on.bind_pwd.value))"
+          insecure_no_ssl: ((.properties.auth_selector.ldap_on.ldap_no_ssl.value))
+          insecure_skip_verify: ((.properties.auth_selector.ldap_on.skip_ssl_verification.value))
+          ca_cert: ((.properties.auth_selector.ldap_on.ldap_ca_cert.value))
+          start_tls: ((.properties.auth_selector.ldap_on.start_tls.value))
+          # BaseDN to start the search from. e.g. "ou=people,dc=mycompany,dc=com"
+          user_search_base_dn: ((.properties.auth_selector.ldap_on.user_search_base_dn.value))
+          # Optional filter to apply when searching the directory. e.g. "(objectClass=person)"
+          user_search_filter: ((.properties.auth_selector.ldap_on.user_search_filter.value))
+          # Attribute to match against the inputted username.
+          # This will be translated and combined with the other filter as ‘(=)‘.
+          user_search_username: ((.properties.auth_selector.ldap_on.user_search_username.value))
+          # A mapping of attributes on the user entry to claims. Defaults to ‘uid’ if empty.
+          user_search_id_attr: ((.properties.auth_selector.ldap_on.user_search_id_attr.value))
+          # A mapping of attributes on the user entry to claims.
+          user_search_name_attr: ((.properties.auth_selector.ldap_on.user_search_name_attr.value))
+          # A mapping of attributes on the user entry to claims. Defaults to ‘mail’ if empty.
+          user_search_email_attr: ((.properties.auth_selector.ldap_on.user_search_email_attr.value))
+          # Can either be ‘sub’ - search the whole sub tree or ‘one’ - only search one level. Defaults to ‘sub’ if empty.
+          user_search_scope: ((.properties.auth_selector.ldap_on.user_search_scope.value))
+          # BaseDN to start the search from. e.g. "ou=groups,dc=mycompany,dc=com"
+          group_search_base_dn: ((.properties.auth_selector.ldap_on.group_search_base_dn.value))
+          # Optional filter to apply when searching the directory. e.g. "(objectClass=posixGroup)"
+          group_search_filter: ((.properties.auth_selector.ldap_on.group_search_filter.value))
+          # Adds an additional requirement to the filter that an attribute in the group match the user’s attribute value.
+          # The exact filter being added is (=)
+          group_search_group_attr: ((.properties.auth_selector.ldap_on.group_search_group_attr.value))
+          group_search_user_attr: ((.properties.auth_selector.ldap_on.group_search_user_attr.value))
+          # The attribute of the group that represents its name, e.g. "cn"
+          group_search_name_attr: ((.properties.auth_selector.ldap_on.group_search_name_attr.value))
+          # Can either be ‘sub’ - search the whole sub tree or ‘one’ - only search one level. Defaults to ‘sub’ if empty.
+          group_search_scope: ((.properties.auth_selector.ldap_on.group_search_scope.value))
+
+      property_blueprints:
+      - name: ldap_host
+        type: domain
+        label: LDAP Host
+        configurable: true
+      - name: bind_dn
+        type: string
+        label: Bind  DN (ldap_bind_dn)
+        configurable: true
+      - name: bind_pwd
+        type: secret
+        label: Bind account password (ldap_bind_pw)
+        configurable: true
+      - name: ldap_no_ssl
+        type: boolean
+        label: LDAP host does not use ldaps (ldap_insecure_no_ssl)
+        configurable: true
+      - name: skip_ssl_verification
+        type: boolean
+        label: Skip SSL verification (ldap_insecure_skip_verify)
+        configurable: true
+        optional: true
+      - name: ldap_ca_cert
+        type: ca_certificate
+        label: LDAP CA certificate (ldap_ca_cert)
+        configurable: true
+        optional : true
+      - name: start_tls
+        type: boolean
+        label: Start tls (ldap_start_tls)
+        optional: true
+      - name: user_search_base_dn
+        label: User search base dn (ldap_user_search_base_dn)
+        type: string
+        configurable: true
+        optional: false
+      - name: user_search_filter
+        label: User search filter (ldap_user_search_filter)
+        type: string
+        configurable: true
+        optional: true
+      - name: user_search_username
+        label: User search user name (ldap_user_search_username)
+        description: |
+          Attribute to match against the inputted username.
+          This will be translated and combined with the other filter as ‘(=)‘.
+        type: string
+        configurable: true
+        optional: false
+      - name: user_search_id_attr
+        label: User ID attribute (ldap_user_search_id_attr)
+        description: A mapping of attributes on the user entry to claims. Defaults to ‘uid’ if empty.
+        type: string
+        configurable: true
+        optional: true
+      - name: user_search_name_attr
+        label: User name attribute (ldap_user_search_name_attr)
+        description: A mapping of attributes on the user entry to claims.
+        type: string
+        configurable: true
+        optional: true
+      - name: user_search_email_attr
+        label: Email attribute (ldap_user_search_email_attr)
+        description: A mapping of attributes on the user entry to claims. Defaults to ‘mail’ if empty.
+        type: string
+        configurable: true
+        optional: true
+      - name: user_search_scope
+        label: User search scope (ldap_user_search_scope)
+        description: Can either be ‘sub’ - search the whole sub tree or ‘one’ - only search one level. Defaults to ‘sub’ if empty.
+        type: string
+        configurable: true
+        optional: true
+      - name: group_search_base_dn
+        label: Group search base dn (ldap_group_search_base_dn)
+        description: Base DN to start the search from. e.g. ou=groups,dc=mycompany,dc=com
+        type: string
+        configurable: true
+        optional: false
+      - name: group_search_filter
+        label: Group search filter (ldap_group_search_filter)
+        description: Optional filter to apply when searching the directory. e.g. (objectClass=posixGroup)
+        type: string
+        configurable: true
+        optional: true
+      - name: group_search_group_attr
+        label: Group search group attribute (ldap_group_search_group_attr)
+        description: |
+          Adds an additional requirement to the filter that an attribute in the group match the user’s attribute value.
+          The exact filter being added is (=)
+        type: string
+        configurable: true
+        optional: true
+      - name: group_search_user_attr
+        label: Group search user attribute (ldap_group_search_user_attr)
+        description:
+        type: string
+        configurable: true
+        optional: true
+      - name: group_search_name_attr
+        label: Group search name attribute (ldap_group_search_name_attr)
+        description: The attribute of the group that represents its name, e.g. cn
+        type: string
+        configurable: true
+        optional: true
+      - name: group_search_scope
+        label: Group search scope (ldap_group_search_scope)
+        description: Can either be ‘sub’ - search the whole sub tree or ‘one’ - only search one level. Defaults to ‘sub’ if empty.
+        type: string
+        configurable: true
+        optional: true
+      - name: ldap_main_team_group
+        label: Main team ldap group
+        type: string
+        configurable: true
+        optional: true
+
+    - name: ldap_off
+      select_value: ldap_off
+      label: Disabled
+      named_manifests:
+      - name: ldap_settings
+        manifest: ""
 
 
 - name: Logging #2
@@ -190,6 +397,11 @@ packages:
     dynamic_ip: 0
     static_ip: 1
     type: standalone
+    networks:
+      - static_ips: (( .properties.static_ip.selected_option.parsed_manifest(ips) ))
+        name: (($self.service_network))
+
+
     templates:
     - name: web
       release: concourse
@@ -200,13 +412,17 @@ packages:
     - name: credhub
       release: credhub
     properties:
-      vm_extensions:
-      - ((.properties.network_extension.value))
+      #  vm_extensions:
+      #  - ((.properties.network_extension.value))
       main_team:
         auth:
           local:
             users: [ admin ]
+          ldap:
+            groups: [ ((.properties.auth_selector.ldap_on.ldap_main_team_group.value)) ]
       add_local_users: [ 'admin:((.properties.admin_password.password))' ]
+      ldap_auth: (( .properties.auth_selector.selected_option.parsed_manifest(ldap_settings) ))
+
       token_signing_key:
         private_key: ((.properties.token_signing_key.private_key_pem))
         public_key: ((.properties.token_signing_key.public_key_pem))
@@ -360,298 +576,3 @@ packages:
           private_key: ((.properties.worker_key.private_key_pem))
           public_key: ((.properties.worker_key.public_key_openssh))
           public_key_fingerprint: ((.properties.worker_key.public_key_fingerprint))
-
-
-#  - name: workers_form
-#  label: Workers configuration
-#  properties:
-#  - name: worker_host_key
-#    label: TSA host key
-#    configurable: false
-#    type: rsa_pkey_credentials
-
-
-#- name: web #0
-#  label: Web configuration
-#  properties:
-#  - name: external_url
-#    label: "Concourse portal external URL"
-#    type: "http_url"
-#    description: "Concourse web portal host name"
-#  - name: db_password
-#    label: Dn password
-#    type: secret
-#    configurable: false
-#  - name: atc_tls
-#    label: TLS Certificate
-#    type: rsa_cert_credentials
-#    configurable: false
-#    default:
-#      domains:
-#      - "((.properties.external_url.value))"
-#- name: proxy_form #1
-#  label: Proxy configuration
-#  properties:
-#  - name: http_proxy
-#    label: "Http proxy"
-#    type: "string"
-#    optional: true
-#    description: "http_proxy setting on the vms"
-#  - name: https_proxy
-#    label: "Https proxy"
-#    type: "string"
-#    description: "https_proxy setting on the vms"
-#    optional: true
-#  - name: no_proxy
-#    label: "By pass proxy"
-#    type: "string"
-#    description: "no_proxy setting on the vms"
-#    optional: true
-#- name: Logging #2
-#  label: Logging configuration
-#  properties:
-#  - name: audit_logs
-#    label: "Enable Audit Logging"
-#    type: multi_select_options
-#    configurable: true
-#    optional: true
-#    options:
-#    - name: build_log
-#      label: "Enable Build Audit Logging"
-#    - name: job_log
-#      label: "Enable Job Audit Logging"
-#    - name: pipeline_log
-#      label: "Enable Pipeline Audit Logging"
-#    - name: resource_log
-#      label: "Enable Resource Audit Logging"
-#    - name: team_log
-#      label: "Enable Team Audit Logging"
-#    - name: system_log
-#      label: "Enable System Audit Logging"
-#    - name: volume_log
-#      label: "Enable volume Audit Logging"
-#    - name: worker_log
-#      label: "Enable Worker Audit Logging"
-#    - name: container_log
-#      label: "Enable Container Audit Logging"
-#- name: authn_authz #3
-#  label: "Authentication and Authorization"
-#  properties:
-#  - name: auth_uaa
-#    type: selector
-#    label: UAA Settings
-#    description: "Internal UAA authnetications"
-#    configurable: true
-#    default: uaa_on
-#    option_templates:
-#    - name: uaa_on
-#      label: Enabled
-#      select_value: uaa_on
-#    - name: uaa_off
-#      label: Disabled
-#      select_value: uaa_off
-#  - name: uaa_admin
-#    type: secret
-#    label: UAA admin secret
-#    configurable: false
-#  - name: uaa_login
-#    type: secret
-#    label: UAA login secret
-#    configurable: false
-#  - name: uaa_admin_password
-#    type: secret
-#    label: UAA admin password
-#    configurable: false
-#  - name: uaa_jwt
-#    label: jwt token signing key
-#    type: rsa_pkey_credentials
-#    configurable: false
-#  - name: uaa_db_password
-#    type: secret
-#    label: UAA db password
-#    configurable: false
-#  - name: uaa_encryption_key
-#    type: secret
-#    label: UAA encryption password
-#    configurable: false
-#
-#
-#  - name: auth_ldap
-#    type: selector
-#    label: LDAP settings
-#    configurable: true
-#    default: ldap_off
-#    description: "LDAP Authentication settings"
-#    option_templates:
-#    - name: ldap_on
-#      select_value: ldap_on
-#      label: enabled
-#      property_blueprints:
-#      - name: ldap_host
-#        type: domain
-#        label: LDAP Host
-#        configurable: true
-#      - name: ldap_creds
-#        type: simple_credentials
-#        label: Bind account and password
-#        configurable: true
-#    - name: ldap_off
-#      select_value: ldap_off
-#      label: Disabled
-#
-#- name: tsa_form #4
-#  label: TSA configuration
-#  properties:
-#  - name: token_signing_key
-#    label: Token signing key
-#    type: rsa_pkey_credentials
-#    configurable: false
-#  - name: tsa_host_key
-#    label: TSA host key
-#    configurable: false
-#    type: rsa_pkey_credentials
-#
-#
-#- name: workers_form
-#  label: Workers configuration
-#  properties:
-#  - name: worker_host_key
-#    label: TSA host key
-#    configurable: false
-#    type: rsa_pkey_credentials
-#packages:
-#- name: bpm
-#  type: bosh-release
-#  path: resources/bpm-release-1.1.13.tgz
-#- name: uaa
-#  type: bosh-release
-#  path: resources/uaa-release-75.6.0.tgz
-#- name: concourse
-#  path: resources/concourse-bosh-release-6.7.6.tgz
-#  type: bosh-release
-#- name: postgres
-#  type: bosh-release
-#  path: resources/postgres-release-43.tgz
-#
-#  jobs:
-#  - name: web
-#    instance: 1
-#    dynamic_ip: 1
-#    type: standalone
-#    consumes:
-#      postgres:
-#        from: db
-#    properties:
-#      token_signing_key:
-#        private_key: ((.properties.token_signing_key.private_key_pem))
-#        public_key: ((.properties.token_signing_key.public_key_pem))
-#      external_url: ((.properties.external_url.value))
-#      postgresql:
-#        database: &db_name atc
-#        role: &db_role
-#          name: concourse
-#          password: ((.properties.db_password.value))
-#
-#      worker_gateway:
-#        host_key:
-#          public_key: ((.properties.tsa_host_key.public_key_pem))
-#          private_key: ((.properties.tsa_host_key.private_key_pem))
-#          public_key_fingerprint: ((.properties.tsa_host_key.public_key_fingerprint))
-#
-#        authorized_keys: |
-#          ((.properties.worker_host_key.public_key_pem))
-#      tls:
-#        bind_port: 443
-#        cert:
-#          certificate: ((.properties.atc_tls.cert_pem))
-#          private_key: ((.properties.atc_tls.private_key_pem))
-#      uaa:
-#        url: ((.properties.external_url.value)):8443
-#        port: 8181
-#        scim:
-#          users:
-#          - name: admin
-#            password: ((.properties.uaa_admin_password.value))
-#            groups:
-#            - scim.write
-#            - scim.read
-#            - bosh.admin
-#            - credhub.read
-#            - credhub.write
-#        admin: {client_secret: ((.properties.uaa_admin.value))}
-#        login: {client_secret: ((.properties.uaa_login.value))}
-#        zones: {internal: {hostnames: []}}
-#        sslCertificate: ((.properties.atc_tls.cert_pem))
-#        sslPrivateKey: ((.properties.atc_tls.private_key_pem))
-#        jwt:
-#          revocable: true
-#          policy:
-#            active_key_id: key-1
-#            keys:
-#              key-1:
-#                signingKey: ((.properties.uaa_jwt.private_key_pem))
-#      uaadb:
-#        port: 5432
-#        db_scheme: postgresql
-#        tls: disabled
-#        databases:
-#        - tag: uaa
-#          name: uaa
-#        roles:
-#        - tag: admin
-#          name: uaa
-#          password: &uaa_db_passwd ((.properties.uaa_db_password.value))
-#      encryption:
-#        active_key_label: key-1
-#        encryption_keys:
-#        - label: key-1
-#          passphrase: ((.properties.uaa_encryption_key.value))
-#      login:
-#        saml:
-#          serviceProviderCertificate: ((.properties.atc_tls.cert_pem))
-#          serviceProviderKey: ((.properties.atc_tls.private_key_pem))
-#          serviceProviderKeyPassword: ""
-#    templates:
-#    - name: web
-#      release: concourse
-#    - name: bpm
-#      release: bpm
-#    - name: uaa
-#      release: uaa
-#  - name: worker
-#    instance: 1
-#    dynamic_ip: 1
-#    type: standalone
-#    templates:
-#    - name: worker
-#      release: concourse
-#    properties:
-#      drain_timeout: 10m
-#      worker_gateway:
-#        worker_key:
-#          public_key: ((.properties.worker_host_key.public_key_pem))
-#          private_key: ((.properties.worker_host_key.private_key_pem))
-#
-#
-#  - name: db
-#    instance: 1
-#    dynamic_ip: 1
-#    type: standalone
-#    memory: 512
-#    ephemeral_disk: 4096
-#    persistent_disk: 4096
-#    cpu: 2
-#    templates:
-#    - name: postgres
-#      release: postgres
-#      properties:
-#        databases:
-#          port: 5432
-#          databases:
-#          - name: atc
-#          - name: uaa
-#          roles:
-#          - *db_role
-#          - name: uaa
-#            password: ((.properties.uaa_db_password.value))
-
